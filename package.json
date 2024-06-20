@@ -1,16 +1,28 @@
 {
   "name": "errsole-sqlite",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.0.0",
+  "description": "SQLite storage plugin for Errsole",
+  "main": "lib/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+
+   "keywords": [
+    "errsole",
+    "sqlite3",
+    "log",
+    "logs",
+    "logging",
+    "logger"
+  ],
+
+  "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "sqlite3": "^5.1.7"
-  }
+  },
+
+  "files": [
+    "lib/index.js"
+  ]
 }
