@@ -6,8 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-
-   "keywords": [
+  "keywords": [
     "errsole",
     "sqlite3",
     "log",
@@ -15,13 +14,12 @@
     "logging",
     "logger"
   ],
-
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "node-cron": "^3.0.3",
     "sqlite3": "^5.1.7"
   },
-
   "files": [
     "lib/index.js"
   ]
