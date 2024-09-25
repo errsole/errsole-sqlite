@@ -1,4 +1,5 @@
 # errsole-sqlite
+<a href="https://coveralls.io/github/errsole/errsole-sqlite"><img src="https://coveralls.io/repos/github/errsole/errsole-sqlite/badge.svg" alt="Coverage Status" /></a>
 
 SQLite storage plugin for Errsole.
 
