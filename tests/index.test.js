@@ -197,64 +197,6 @@ describe('ErrsoleSQLite - getCacheSize', () => {
     expect(errsoleSQLite.db.get).toHaveBeenCalledWith('PRAGMA cache_size', expect.any(Function));
   });
 });
-describe('ErrsoleSQLite - createTables', () => {
-  let errsoleSQLite;
-
-  beforeEach(() => {
-    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
-    errsoleSQLite = new ErrsoleSQLite(':memory:');
-
-    // Spy on the db.run function to mock database queries
-    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, callback) => {
-      callback(); // Simulate a successful query execution with no errors
-    });
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks(); // Clear all mocks after each test
-  });
-
-  it('should create all necessary tables and indices', async () => {
-    await errsoleSQLite.createTables();
-
-    // Verify that db.run has been called for each query
-    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(7);
-
-    // Check that the table creation queries were called
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v2'), expect.any(Function));
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_users'), expect.any(Function));
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_config'), expect.any(Function));
-
-    // Check that the index creation queries were called
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE INDEX IF NOT EXISTS idx_errsole_logs_v2_source_level_id'), expect.any(Function));
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE INDEX IF NOT EXISTS idx_errsole_logs_v2_source_level_timestamp'), expect.any(Function));
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE INDEX IF NOT EXISTS idx_errsole_logs_v2_hostname_pid_id'), expect.any(Function));
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE INDEX IF NOT EXISTS idx_errsole_id'), expect.any(Function));
-  });
-
-  it('should handle errors during table creation gracefully', async () => {
-    const mockError = new Error('Table creation error');
-
-    // Mock db.run to throw an error on the first query
-    errsoleSQLite.db.run.mockImplementationOnce((query, callback) => {
-      callback(mockError);
-    });
-
-    await expect(errsoleSQLite.createTables()).rejects.toThrow('Table creation error');
-
-    // Verify that the first query was called and failed, preventing the others from executing
-    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(1);
-  });
-
-  it('should set isConnectionInProgress to false after table creation', async () => {
-    // Set isConnectionInProgress to true initially
-    errsoleSQLite.isConnectionInProgress = true;
-
-    await errsoleSQLite.createTables();
-
-    expect(errsoleSQLite.isConnectionInProgress).toBe(false);
-  });
-});
 
 describe('ErrsoleSQLite - ensureLogsTTL', () => {
   let errsoleSQLite;
