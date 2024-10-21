@@ -39,6 +39,16 @@ declare module 'errsole-sqlite' {
       email: string;
       role: string;
     }
+
+    interface Notification {
+      id?: number;
+      errsole_id: number;
+      hostname: string;
+      hashed_message: string;
+      created_at?: Date;
+      updated_at?: Date;
+    }
+
   
     class ErrsoleSQLite {
       constructor(filename: string);
@@ -61,6 +71,8 @@ declare module 'errsole-sqlite' {
       updateUserByEmail(email: string, updates: Partial<User>): Promise<{ item: User }>;
       updatePassword(email: string, currentPassword: string, newPassword: string): Promise<{ item: User }>;
       deleteUser(userId: number): Promise<{}>;
+      insertNotificationItem(notification: Notification): Promise<{ previousNotificationItem: Notification | null, todayNotificationCount: number }>;
+
     }
   
     export default ErrsoleSQLite;
