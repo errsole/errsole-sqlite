@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const ErrsoleSQLite = require('../lib/index');
 const bcrypt = require('bcryptjs');
 
-/* globals expect, jest, beforeEach, it, afterEach, describe, beforeAll, afterAll */
+/* globals expect, jest, beforeEach, it, afterEach, describe, beforeAll, afterAll, test */
 
 jest.mock('node-cron');
 
@@ -106,6 +106,60 @@ describe('ErrsoleSQLite - initialize', () => {
     expect(errsoleSQLite.emit).toHaveBeenNthCalledWith(2, 'ready');
   });
 });
+
+describe('ErrsoleSQLite - createTables', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+
+    // Spy on the db.run function to mock the table creation queries
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, callback) => {
+      callback(null); // Simulate successful execution
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks(); // Clear all mocks after each test
+  });
+
+  it('should create necessary tables successfully', async () => {
+    // Call the createTables function to create required tables
+    await errsoleSQLite.createTables();
+
+    // Verify specific SQL statements are called
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v2'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_users'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_config'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_notifications'), expect.any(Function));
+  });
+
+  it('should handle errors during table creation', async () => {
+    // Mock db.run to simulate an error during table creation
+    const mockError = new Error('Database error during table creation');
+    errsoleSQLite.db.run.mockImplementationOnce((query, callback) => {
+      callback(mockError);
+    });
+
+    await expect(errsoleSQLite.createTables()).rejects.toThrow('Database error during table creation');
+
+    // Verify that db.run was only called once due to the error
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('should continue creating tables if one table already exists', async () => {
+    // Verify that the function does not throw an error for "table already exists"
+    await expect(errsoleSQLite.createTables()).resolves.not.toThrow();
+
+    // Verify that db.run was called for each table creation, even with errors
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v2'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_users'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_config'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_notifications'), expect.any(Function));
+  });
+});
+
 describe('ErrsoleSQLite - setCacheSize', () => {
   let errsoleSQLite;
 
@@ -1825,5 +1879,232 @@ describe('ErrsoleSQLite - flushLogs', () => {
       expect.any(Array),
       expect.any(Function)
     );
+  });
+});
+
+describe('ErrsoleSQLite - insertNotificationItem', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+
+    // Mock db.run and db.get methods to simulate database interaction
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, params, callback) => {
+      if (typeof params === 'function') {
+        // Handle case where no params are provided
+        callback = params;
+      }
+      callback(null); // Simulate successful execution for db.run
+    });
+
+    jest.spyOn(errsoleSQLite.db, 'get').mockImplementation((query, params, callback) => {
+      if (typeof params === 'function') {
+        // Handle case where no params are provided
+        callback = params;
+      }
+      callback(null, null); // Default: no previous notification found
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks(); // Clear all mocks after each test
+  });
+
+  it('should insert a new notification successfully', async () => {
+    // Mock `get` to simulate no previous notification and set notification count to 1
+    errsoleSQLite.db.get
+      .mockImplementationOnce((query, params, callback) => callback(null, null)) // No previous notification
+      .mockImplementationOnce((query, params, callback) => callback(null, { notificationCount: 1 })); // Today's count
+
+    const notification = {
+      errsole_id: 1,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    const result = await errsoleSQLite.insertNotificationItem(notification);
+
+    // Verify that db.run was called for transaction, insertion, and commit
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('BEGIN TRANSACTION;', expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO errsole_notifications'),
+      expect.arrayContaining([notification.errsole_id, notification.hostname, notification.hashed_message]),
+      expect.any(Function)
+    );
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('COMMIT;', expect.any(Function));
+
+    // Verify the returned object structure
+    expect(result).toEqual({
+      previousNotificationItem: null,
+      todayNotificationCount: 1
+    });
+  });
+
+  it('should return the previous notification item if it exists', async () => {
+    const mockPreviousNotification = { id: 1, hostname: 'localhost', hashed_message: 'hashedMessage' };
+    errsoleSQLite.db.get
+      .mockImplementationOnce((query, params, callback) => callback(null, mockPreviousNotification)) // Previous notification found
+      .mockImplementationOnce((query, params, callback) => callback(null, { notificationCount: 2 })); // Today's count
+
+    const notification = {
+      errsole_id: 2,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    const result = await errsoleSQLite.insertNotificationItem(notification);
+
+    expect(result.previousNotificationItem).toEqual(mockPreviousNotification);
+    expect(result.todayNotificationCount).toBe(2);
+  });
+
+  it('should return 0 todayNotificationCount if no notifications today', async () => {
+    errsoleSQLite.db.get
+      .mockImplementationOnce((query, params, callback) => callback(null, null)) // No previous notification
+      .mockImplementationOnce((query, params, callback) => callback(null, { notificationCount: 0 })); // No notifications today
+
+    const notification = {
+      errsole_id: 3,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    const result = await errsoleSQLite.insertNotificationItem(notification);
+
+    expect(result.todayNotificationCount).toBe(0);
+  });
+
+  it('should roll back if an error occurs during insertion', async () => {
+    errsoleSQLite.db.run
+      .mockImplementationOnce((query, callback) => callback(null)) // BEGIN TRANSACTION
+      .mockImplementationOnce((query, params, callback) => callback(new Error('Insertion error'))); // Simulate insertion error
+
+    const notification = {
+      errsole_id: 4,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    await expect(errsoleSQLite.insertNotificationItem(notification)).rejects.toThrow('Insertion error');
+
+    // Verify that rollback is called
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('ROLLBACK;', expect.any(Function));
+  });
+
+  it('should roll back if an error occurs during transaction', async () => {
+    // Simulate an error on BEGIN TRANSACTION
+    errsoleSQLite.db.run.mockImplementationOnce((query, callback) => callback(new Error('Transaction error')));
+
+    const notification = {
+      errsole_id: 5,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    await expect(errsoleSQLite.insertNotificationItem(notification)).rejects.toThrow('Transaction error');
+
+    // Verify that rollback is called
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('ROLLBACK;', expect.any(Function));
+  });
+
+  it('should throw error if unable to fetch todayNotificationCount', async () => {
+    errsoleSQLite.db.get
+      .mockImplementationOnce((query, params, callback) => callback(null, null)) // No previous notification
+      .mockImplementationOnce((query, params, callback) => callback(new Error('Count query error'))); // Error on count query
+
+    const notification = {
+      errsole_id: 6,
+      hostname: 'localhost',
+      hashed_message: 'hashedMessage'
+    };
+
+    await expect(errsoleSQLite.insertNotificationItem(notification)).rejects.toThrow('Count query error');
+
+    // Verify that rollback is called
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('ROLLBACK;', expect.any(Function));
+  });
+});
+
+describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+    jest.useFakeTimers();
+
+    // Mock the getConfig method to return the default TTL
+    jest.spyOn(errsoleSQLite, 'getConfig').mockResolvedValue({ item: { value: '2592000000' } }); // 30 days in milliseconds
+
+    // Spy on db.all and db.run for SELECT and DELETE queries
+    jest.spyOn(errsoleSQLite.db, 'all').mockImplementation((query, params, callback) => {
+      callback(null, []); // No rows found initially
+    });
+
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, params, callback) => {
+      callback(null); // Simulate successful deletion
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('should not run if deleteExpiredNotificationItemsRunning is true', async () => {
+    errsoleSQLite.deleteExpiredNotificationItemsRunning = true;
+
+    await errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Ensure db.all and db.run are not called
+    expect(errsoleSQLite.db.all).not.toHaveBeenCalled();
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+  });
+
+  it('should delete expired notifications based on default TTL if config not found', async () => {
+    errsoleSQLite.getConfig.mockResolvedValueOnce({ item: null }); // Simulate no config found
+
+    // Mock db.all to return rows simulating expired notifications
+    errsoleSQLite.db.all.mockImplementationOnce((query, params, callback) => {
+      callback(null, [{ id: 1 }, { id: 2 }, { id: 3 }]);
+    });
+
+    const result = await errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Verify that db.run was called with DELETE query for ids
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM errsole_notifications WHERE id IN'),
+      [1, 2, 3],
+      expect.any(Function)
+    );
+
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+  });
+
+  it('should use custom TTL from config if available', async () => {
+    const customTTL = 7 * 24 * 60 * 60 * 1000; // Custom TTL of 7 days
+    errsoleSQLite.getConfig.mockResolvedValueOnce({ item: { value: customTTL.toString() } });
+
+    await errsoleSQLite.deleteExpiredNotificationItems();
+
+    const expirationTime = new Date(Date.now() - customTTL).toISOString().slice(0, 19).replace('T', ' ');
+    expect(errsoleSQLite.db.all).toHaveBeenCalledWith(
+      'SELECT id FROM errsole_notifications WHERE created_at < ? LIMIT 1000',
+      [expirationTime],
+      expect.any(Function)
+    );
+
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+  });
+
+  it('should reset deleteExpiredNotificationItemsRunning flag after completion', async () => {
+    errsoleSQLite.db.all.mockImplementationOnce((query, params, callback) => {
+      callback(null, []); // No rows to delete
+    });
+
+    await errsoleSQLite.deleteExpiredNotificationItems();
+
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
   });
 });
