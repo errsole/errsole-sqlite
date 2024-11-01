@@ -2108,3 +2108,49 @@ describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
     expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
   });
 });
+
+describe('ErrsoleSQLite - deleteExpiredLogs', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+    jest.useFakeTimers();
+
+    // Mock the getConfig method to return the default TTL
+    jest.spyOn(errsoleSQLite, 'getConfig').mockResolvedValue({ item: { value: '2592000000' } }); // 30 days in milliseconds
+
+    // Spy on db.all and db.run for SELECT and DELETE queries
+    jest.spyOn(errsoleSQLite.db, 'all').mockImplementation((query, params, callback) => {
+      callback(null, [{ id: 1 }, { id: 2 }, { id: 3 }]); // Mock rows for expired logs
+    });
+
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, params, callback) => {
+      callback(null); // Simulate successful deletion
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('should not run if deleteExpiredLogsRunning is true', async () => {
+    errsoleSQLite.deleteExpiredLogsRunning = true;
+
+    await errsoleSQLite.deleteExpiredLogs();
+
+    expect(errsoleSQLite.db.all).not.toHaveBeenCalled();
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+  });
+
+  it('should reset deleteExpiredLogsRunning flag after completion', async () => {
+    errsoleSQLite.db.all.mockImplementationOnce((query, params, callback) => {
+      callback(null, []); // No rows to delete
+    });
+
+    await errsoleSQLite.deleteExpiredLogs();
+
+    expect(errsoleSQLite.deleteExpiredLogsRunning).toBe(false);
+  });
+});
