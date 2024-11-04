@@ -2072,7 +2072,7 @@ describe('ErrsoleSQLite - deleteExpiredLogs', () => {
   });
 });
 
-describe('ErrsoleSQLite1 - deleteExpiredNotificationItems1', () => {
+describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
   let errsoleSQLite;
   let originalDateNow;
   let consoleErrorSpy;
