@@ -41,12 +41,15 @@ describe('ErrsoleSQLite - initialize', () => {
     // Create an instance of ErrsoleSQLite with an in-memory SQLite database
     errsoleSQLite = new ErrsoleSQLite(':memory:'); // Assign to higher scoped variable
 
-    // Spy on and mock the dependent methods
+    // Spy on and mock the dependent methods except createTables
     jest.spyOn(errsoleSQLite, 'setCacheSize').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'createTables').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'ensureLogsTTL').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'flushLogs').mockImplementation(() => Promise.resolve());
     jest.spyOn(errsoleSQLite, 'deleteExpiredLogs').mockImplementation(() => Promise.resolve());
+
+    // Additionally, mock deleteExpiredNotificationItems to prevent it from accessing the database
+    jest.spyOn(errsoleSQLite, 'deleteExpiredNotificationItems').mockImplementation(() => Promise.resolve());
 
     // Spy on the emit method
     jest.spyOn(errsoleSQLite, 'emit').mockImplementation(() => {});
@@ -214,6 +217,7 @@ describe('ErrsoleSQLite - setCacheSize', () => {
     expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(1);
   });
 });
+
 describe('ErrsoleSQLite - getCacheSize', () => {
   let errsoleSQLite;
 
@@ -449,6 +453,7 @@ describe('ErrsoleSQLite - setConfig', () => {
     );
   });
 });
+
 describe('ErrsoleSQLite - deleteConfig', () => {
   let errsoleSQLite;
   let dbRunSpy;
@@ -511,6 +516,7 @@ describe('ErrsoleSQLite - deleteConfig', () => {
     );
   });
 });
+
 describe('ErrsoleSQLite - postLogs', () => {
   let errsoleSQLite;
 
@@ -652,6 +658,7 @@ describe('ErrsoleSQLite - getHostnames', () => {
     ]);
   });
 });
+
 describe('ErrsoleSQLite - getLogs', () => {
   let errsoleSQLite;
 
@@ -913,9 +920,29 @@ describe('ErrsoleSQLite - searchLogs', () => {
     const result = await errsoleSQLite.searchLogs(['log'], { gte_timestamp: startTimestamp, lte_timestamp: endTimestamp });
 
     expect(result.items).toHaveLength(1);
+
+    // Convert the string timestamp from the result into a Date object for comparison
     const logTimestamp = new Date(result.items[0].timestamp);
+
     expect(logTimestamp.getTime()).toBeGreaterThanOrEqual(startTimestamp.getTime());
     expect(logTimestamp.getTime()).toBeLessThanOrEqual(endTimestamp.getTime());
+  });
+
+  it('should return logs filtered by level_json', async () => {
+    const mockLogs = [
+      { id: 1, hostname: 'localhost', pid: 1234, source: 'test', timestamp: new Date(), level: 'info', message: 'Log message', errsole_id: 1 }
+    ];
+
+    // Mock the database response
+    errsoleSQLite.db.all = jest.fn((query, values, callback) => {
+      callback(null, mockLogs);
+    });
+
+    const result = await errsoleSQLite.searchLogs(['message'], { level_json: [{ source: 'test', level: 'info' }] });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].source).toBe('test');
+    expect(result.items[0].level).toBe('info');
   });
 
   it('should return logs filtered by errsole_id', async () => {
@@ -1171,7 +1198,7 @@ describe('ErrsoleSQLite - createUser', () => {
     const user = { name: 'John Doe', email: 'john.doe@example.com', password: 'password123', role: 'admin' };
 
     // Mock db.run to simulate successful insertion
-    errsoleSQLite.db.run.mockImplementation(function (query, params, callback) {
+    errsoleSQLite.db.run.mockImplementationOnce(function (query, params, callback) {
       callback.call({ lastID: 1 }, null); // Simulate the last inserted ID
     });
 
@@ -1200,7 +1227,7 @@ describe('ErrsoleSQLite - createUser', () => {
     const user = { name: 'Jane Doe', email: 'jane.doe@example.com', password: 'password123', role: 'user' };
 
     // Mock db.run to simulate SQLITE_CONSTRAINT error
-    errsoleSQLite.db.run.mockImplementation(function (query, params, callback) {
+    errsoleSQLite.db.run.mockImplementationOnce(function (query, params, callback) {
       const error = new Error('SQLITE_CONSTRAINT: email must be unique');
       error.code = 'SQLITE_CONSTRAINT';
       callback(error);
@@ -1718,6 +1745,7 @@ describe('ErrsoleSQLite - deleteUser2', () => {
     );
   });
 });
+
 describe('ErrsoleSQLite - searchLogs with gt_id filter', () => {
   let errsoleSQLite;
 
