@@ -2071,3 +2071,178 @@ describe('ErrsoleSQLite - deleteExpiredLogs', () => {
     expect(errsoleSQLite.deleteExpiredLogsRunning).toBe(false);
   });
 });
+
+describe('ErrsoleSQLite1 - deleteExpiredNotificationItems1', () => {
+  let errsoleSQLite;
+  let originalDateNow;
+  let consoleErrorSpy;
+
+  beforeEach(() => {
+    // Instantiate ErrsoleSQLite with an in-memory database
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+
+    // Mock the getConfig method to return TTL configuration
+    jest.spyOn(errsoleSQLite, 'getConfig').mockResolvedValue({ item: { value: '2592000000' } }); // 30 days in milliseconds
+
+    // Mock db.all to select expired notification IDs
+    jest.spyOn(errsoleSQLite.db, 'all').mockImplementation((query, params, callback) => {
+      // Depending on the test, this can be overridden
+      callback(null, [{ id: 1 }, { id: 2 }, { id: 3 }]); // Example IDs
+    });
+
+    // Mock db.run to delete notifications
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation(function (query, params, callback) {
+      // Simulate successful deletion
+      callback(null);
+    });
+
+    // Spy on console.error to verify error logging
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Use fake timers to control setTimeout
+    jest.useFakeTimers();
+
+    // Mock Date.now() to return a fixed timestamp
+    originalDateNow = Date.now;
+    Date.now = jest.fn(() => new Date('2023-01-01T00:00:00Z').getTime());
+  });
+
+  afterEach(() => {
+    // Restore all mocks and spies
+    jest.clearAllMocks();
+    jest.useRealTimers();
+    Date.now = originalDateNow;
+  });
+
+  it('should handle no expired notification items gracefully', async () => {
+    // Mock db.all to return no IDs
+    errsoleSQLite.db.all.mockImplementationOnce((query, params, callback) => {
+      callback(null, []); // No items to delete
+    });
+
+    // Call the method
+    const flushPromise = errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Fast-forward timers
+    jest.runAllTimers();
+
+    // Await the method completion
+    await flushPromise;
+
+    // Assertions
+    expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
+    expect(errsoleSQLite.db.all).toHaveBeenCalledTimes(1);
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('should not run if deleteExpiredNotificationItems is already running', async () => {
+    // Set the running flag
+    errsoleSQLite.deleteExpiredNotificationItemsRunning = true;
+
+    // Call the method
+    await errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Assertions
+    expect(errsoleSQLite.getConfig).not.toHaveBeenCalled();
+    expect(errsoleSQLite.db.all).not.toHaveBeenCalled();
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(true); // Should remain true
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('should handle errors from getConfig gracefully', async () => {
+    // Mock getConfig to throw an error
+    errsoleSQLite.getConfig.mockRejectedValueOnce(new Error('Config fetch error'));
+
+    // Call the method
+    const flushPromise = errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Fast-forward timers
+    jest.runAllTimers();
+
+    // Await the method completion
+    await flushPromise;
+
+    // Assertions
+    expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
+    expect(errsoleSQLite.db.all).not.toHaveBeenCalled();
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Config fetch error'));
+  });
+
+  it('should handle errors from db.all gracefully', async () => {
+    // Mock db.all to throw an error
+    errsoleSQLite.db.all.mockImplementationOnce((query, params, callback) => {
+      callback(new Error('Database select error'));
+    });
+
+    // Call the method
+    const flushPromise = errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Fast-forward timers
+    jest.runAllTimers();
+
+    // Await the method completion
+    await flushPromise;
+
+    // Assertions
+    expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
+    expect(errsoleSQLite.db.all).toHaveBeenCalledTimes(1);
+    expect(errsoleSQLite.db.run).not.toHaveBeenCalled();
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Database select error'));
+  });
+
+  it('should handle errors from db.run gracefully', async () => {
+    // Mock db.run to throw an error during deletion
+    errsoleSQLite.db.run.mockImplementationOnce(function (query, params, callback) {
+      callback(new Error('Database delete error'));
+    });
+
+    // Call the method
+    const flushPromise = errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Fast-forward timers
+    jest.runAllTimers();
+
+    // Await the method completion
+    await flushPromise;
+
+    // Assertions
+    expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
+    expect(errsoleSQLite.db.all).toHaveBeenCalledTimes(1);
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      'DELETE FROM errsole_notifications WHERE id IN (?, ?, ?)',
+      [1, 2, 3],
+      expect.any(Function)
+    );
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(new Error('Database delete error'));
+  });
+
+  it('should reset the running flag after completion', async () => {
+    // Mock db.all to return IDs and then no more
+    errsoleSQLite.db.all
+      .mockImplementationOnce((query, params, callback) => {
+        callback(null, [{ id: 1 }, { id: 2 }, { id: 3 }]);
+      })
+      .mockImplementationOnce((query, params, callback) => {
+        callback(null, []);
+      });
+
+    // Call the method
+    const flushPromise = errsoleSQLite.deleteExpiredNotificationItems();
+
+    // Fast-forward timers
+    jest.runAllTimers();
+
+    // Await the method completion
+    await flushPromise;
+
+    // Ensure the running flag is reset
+    expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+  });
+});
