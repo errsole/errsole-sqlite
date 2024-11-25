@@ -1671,7 +1671,7 @@ describe('ErrsoleSQLite - updatePassword', () => {
   });
 });
 
-describe('ErrsoleSQLite - deleteUser2', () => {
+describe('ErrsoleSQLite - deleteUser', () => {
   let errsoleSQLite;
 
   beforeEach(() => {
@@ -1859,7 +1859,7 @@ describe('ErrsoleSQLite - flushLogs', () => {
 
     expect(mockDbRun).toHaveBeenCalledTimes(1);
     expect(mockDbRun).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO errsole_logs_v2'),
+      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v2'),
       expect.any(Array),
       expect.any(Function)
     );
@@ -1903,7 +1903,7 @@ describe('ErrsoleSQLite - flushLogs', () => {
 
     expect(mockDbRun).toHaveBeenCalledTimes(1);
     expect(mockDbRun).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO errsole_logs_v2'),
+      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v2'),
       expect.any(Array),
       expect.any(Function)
     );
