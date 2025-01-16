@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const ErrsoleSQLite = require('../lib/index');
 const bcrypt = require('bcryptjs');
 
-/* globals expect, jest, beforeEach, it, afterEach, describe, beforeAll, afterAll, test */
+/* globals expect, jest, beforeEach, it, afterEach, describe, beforeAll, afterAll */
 
 jest.mock('node-cron');
 
@@ -2272,5 +2272,53 @@ describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
 
     // Ensure the running flag is reset
     expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
+  });
+});
+
+describe('ErrsoleSQLite - DeleteAllLogs', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, callback) => {
+      if (typeof callback === 'function') {
+        callback(null);
+      }
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should delete all logs successfully', async () => {
+    await expect(errsoleSQLite.DeleteAllLogs()).resolves.not.toThrow();
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
+      expect.any(Function)
+    );
+  });
+
+  it('should handle database errors during deletion', async () => {
+    const dbError = new Error('Database error');
+    errsoleSQLite.db.run.mockImplementationOnce((query, callback) => {
+      callback(dbError);
+    });
+
+    await expect(errsoleSQLite.DeleteAllLogs()).rejects.toThrow('Database error');
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
+      expect.any(Function)
+    );
+  });
+
+  it('should resolve even if there are no logs to delete', async () => {
+    await expect(errsoleSQLite.DeleteAllLogs()).resolves.not.toThrow();
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
+      expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
+      expect.any(Function)
+    );
   });
 });
