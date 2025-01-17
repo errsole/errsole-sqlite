@@ -2293,7 +2293,7 @@ describe('ErrsoleSQLite - DeleteAllLogs', () => {
   });
 
   it('should delete all logs successfully', async () => {
-    await expect(errsoleSQLite.DeleteAllLogs()).resolves.not.toThrow();
+    await expect(errsoleSQLite.deleteAllLogs()).resolves.not.toThrow();
 
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
       expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
@@ -2307,7 +2307,7 @@ describe('ErrsoleSQLite - DeleteAllLogs', () => {
       callback(dbError);
     });
 
-    await expect(errsoleSQLite.DeleteAllLogs()).rejects.toThrow('Database error');
+    await expect(errsoleSQLite.deleteAllLogs()).rejects.toThrow('Database error');
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
       expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
       expect.any(Function)
@@ -2315,7 +2315,7 @@ describe('ErrsoleSQLite - DeleteAllLogs', () => {
   });
 
   it('should resolve even if there are no logs to delete', async () => {
-    await expect(errsoleSQLite.DeleteAllLogs()).resolves.not.toThrow();
+    await expect(errsoleSQLite.deleteAllLogs()).resolves.not.toThrow();
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
       expect.stringContaining(`DELETE FROM ${errsoleSQLite.logsTable}`),
       expect.any(Function)
