@@ -2244,3 +2244,93 @@ describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
     expect(errsoleSQLite.deleteExpiredNotificationItemsRunning).toBe(false);
   });
 });
+
+describe('ErrsoleSQLite - deleteAllLogs', () => {
+  let errsoleSQLite;
+
+  beforeEach(() => {
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
+
+    jest.spyOn(errsoleSQLite.db, 'run').mockImplementation((query, callback) => {
+      callback(null);
+    });
+    errsoleSQLite.logsTable = 'errsole_logs_v2';
+    errsoleSQLite.createLogsTableQuery = 'CREATE TABLE IF NOT EXISTS errsole_logs_v2 (id INTEGER PRIMARY KEY AUTOINCREMENT, message TEXT)';
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should delete all logs successfully', async () => {
+    await expect(errsoleSQLite.deleteAllLogs()).resolves.toEqual({});
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(4);
+
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(1, 'BEGIN TRANSACTION;', expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(2, `DROP TABLE IF EXISTS ${errsoleSQLite.logsTable};`, expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(3, errsoleSQLite.createLogsTableQuery, expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(4, 'COMMIT;', expect.any(Function));
+  });
+
+  it('should handle errors when starting the transaction', async () => {
+    const mockError = new Error('Transaction error');
+
+    errsoleSQLite.db.run.mockImplementationOnce((query, callback) => {
+      callback(mockError);
+    });
+
+    await expect(errsoleSQLite.deleteAllLogs()).rejects.toThrow('Transaction error');
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(1);
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith('BEGIN TRANSACTION;', expect.any(Function));
+  });
+
+  it('should handle errors when dropping the logs table', async () => {
+    const mockError = new Error('Drop table error');
+
+    errsoleSQLite.db.run
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(mockError));
+
+    await expect(errsoleSQLite.deleteAllLogs()).rejects.toThrow('Drop table error');
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(2);
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(1, 'BEGIN TRANSACTION;', expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(2, `DROP TABLE IF EXISTS ${errsoleSQLite.logsTable};`, expect.any(Function));
+  });
+
+  it('should handle errors when recreating the logs table', async () => {
+    const mockError = new Error('Create table error');
+
+    errsoleSQLite.db.run
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(mockError));
+
+    await expect(errsoleSQLite.deleteAllLogs()).rejects.toThrow('Create table error');
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(3);
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(1, 'BEGIN TRANSACTION;', expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(2, `DROP TABLE IF EXISTS ${errsoleSQLite.logsTable};`, expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(3, errsoleSQLite.createLogsTableQuery, expect.any(Function));
+  });
+
+  it('should handle errors when committing the transaction', async () => {
+    const mockError = new Error('Commit error');
+
+    errsoleSQLite.db.run
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(null))
+      .mockImplementationOnce((query, callback) => callback(mockError));
+
+    await expect(errsoleSQLite.deleteAllLogs()).rejects.toThrow('Commit error');
+
+    expect(errsoleSQLite.db.run).toHaveBeenCalledTimes(4);
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(1, 'BEGIN TRANSACTION;', expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(2, `DROP TABLE IF EXISTS ${errsoleSQLite.logsTable};`, expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(3, errsoleSQLite.createLogsTableQuery, expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenNthCalledWith(4, 'COMMIT;', expect.any(Function));
+  });
+});
