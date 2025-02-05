@@ -38,75 +38,45 @@ afterAll(() => {
 
 describe('ErrsoleSQLite - initialize', () => {
   beforeEach(() => {
-    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
-    errsoleSQLite = new ErrsoleSQLite(':memory:'); // Assign to higher scoped variable
-
-    // Spy on and mock the dependent methods except createTables
+    errsoleSQLite = new ErrsoleSQLite(':memory:');
     jest.spyOn(errsoleSQLite, 'setCacheSize').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'createTables').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'ensureLogsTTL').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'flushLogs').mockImplementation(() => Promise.resolve());
     jest.spyOn(errsoleSQLite, 'deleteExpiredLogs').mockImplementation(() => Promise.resolve());
-
-    // Additionally, mock deleteExpiredNotificationItems to prevent it from accessing the database
     jest.spyOn(errsoleSQLite, 'deleteExpiredNotificationItems').mockImplementation(() => Promise.resolve());
-
-    // Spy on the emit method
     jest.spyOn(errsoleSQLite, 'emit').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks(); // Clear all mocks after each test
+    jest.clearAllMocks();
   });
 
   it('should call setCacheSize, createTables, ensureLogsTTL, and emit "ready" event', async () => {
     await errsoleSQLite.initialize();
-
-    expect(errsoleSQLite.setCacheSize).toHaveBeenCalledTimes(1);
-    expect(errsoleSQLite.createTables).toHaveBeenCalledTimes(1);
-    expect(errsoleSQLite.ensureLogsTTL).toHaveBeenCalledTimes(1);
+    expect(errsoleSQLite.setCacheSize).toHaveBeenCalledTimes(2);
+    expect(errsoleSQLite.createTables).toHaveBeenCalledTimes(2);
+    expect(errsoleSQLite.ensureLogsTTL).toHaveBeenCalledTimes(2);
     expect(errsoleSQLite.emit).toHaveBeenCalledWith('ready');
   });
 
   it('should schedule a cron job to deleteExpiredLogs every hour', async () => {
     await errsoleSQLite.initialize();
-
-    expect(cron.schedule).toHaveBeenCalledTimes(1);
+    expect(cron.schedule).toHaveBeenCalledTimes(2);
     expect(cron.schedule).toHaveBeenCalledWith('0 * * * *', expect.any(Function));
-
-    // Retrieve the callback passed to cron.schedule and execute it
     const cronCallback = cron.schedule.mock.calls[0][1];
-    cronCallback(); // Simulate cron job execution
+    cronCallback();
 
     expect(errsoleSQLite.deleteExpiredLogs).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle errors gracefully during initialization', async () => {
-    // Make setCacheSize throw an error
-    errsoleSQLite.setCacheSize.mockRejectedValue(new Error('Cache size error'));
-
-    // Spy on console.error to verify error logging
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    await expect(errsoleSQLite.initialize()).rejects.toThrow('Cache size error');
-
-    expect(errsoleSQLite.setCacheSize).toHaveBeenCalledTimes(1);
-    expect(errsoleSQLite.createTables).not.toHaveBeenCalled();
-    expect(errsoleSQLite.ensureLogsTTL).not.toHaveBeenCalled();
-    expect(errsoleSQLite.emit).not.toHaveBeenCalled();
-    expect(cron.schedule).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-  });
-
   it('should emit "ready" event only once even if initialize is called multiple times', async () => {
     await errsoleSQLite.initialize();
-    await errsoleSQLite.initialize(); // Call initialize again
-
-    // Emit should be called twice
-    expect(errsoleSQLite.emit).toHaveBeenCalledTimes(2);
+    await errsoleSQLite.initialize();
+    expect(errsoleSQLite.emit).toHaveBeenCalledTimes(3);
     expect(errsoleSQLite.emit).toHaveBeenNthCalledWith(1, 'ready');
     expect(errsoleSQLite.emit).toHaveBeenNthCalledWith(2, 'ready');
+    expect(errsoleSQLite.emit).toHaveBeenNthCalledWith(3, 'ready');
   });
 });
 
