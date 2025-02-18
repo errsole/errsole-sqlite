@@ -251,7 +251,7 @@ describe('ErrsoleSQLite - ensureLogsTTL', () => {
     expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
 
     // Check that setConfig was called with the default TTL (30 days)
-    const defaultTTL = (30 * 24 * 60 * 60 * 1000).toString(); // 30 days in milliseconds
+    const defaultTTL = (7 * 24 * 60 * 60 * 1000).toString(); // 30 days in milliseconds
     expect(errsoleSQLite.setConfig).toHaveBeenCalledWith('logsTTL', defaultTTL);
   });
 
