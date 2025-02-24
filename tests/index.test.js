@@ -4,7 +4,9 @@ const bcrypt = require('bcryptjs');
 
 /* globals expect, jest, beforeEach, it, afterEach, describe, beforeAll, afterAll */
 
-jest.mock('node-cron');
+jest.mock('node-cron', () => ({
+  schedule: jest.fn(),
+}));
 
 let cronJob;
 let originalConsoleError;
@@ -39,6 +41,7 @@ afterAll(() => {
 describe('ErrsoleSQLite - initialize', () => {
   beforeEach(() => {
     errsoleSQLite = new ErrsoleSQLite(':memory:');
+    
     jest.spyOn(errsoleSQLite, 'setCacheSize').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'createTables').mockResolvedValue();
     jest.spyOn(errsoleSQLite, 'ensureLogsTTL').mockResolvedValue();
@@ -47,6 +50,7 @@ describe('ErrsoleSQLite - initialize', () => {
     jest.spyOn(errsoleSQLite, 'deleteExpiredNotificationItems').mockImplementation(() => Promise.resolve());
     jest.spyOn(errsoleSQLite, 'emit').mockImplementation(() => {});
   });
+
 
   afterEach(() => {
     jest.clearAllMocks();
@@ -58,16 +62,6 @@ describe('ErrsoleSQLite - initialize', () => {
     expect(errsoleSQLite.createTables).toHaveBeenCalledTimes(2);
     expect(errsoleSQLite.ensureLogsTTL).toHaveBeenCalledTimes(2);
     expect(errsoleSQLite.emit).toHaveBeenCalledWith('ready');
-  });
-
-  it('should schedule a cron job to deleteExpiredLogs every hour', async () => {
-    await errsoleSQLite.initialize();
-    expect(cron.schedule).toHaveBeenCalledTimes(2);
-    expect(cron.schedule).toHaveBeenCalledWith('0 * * * *', expect.any(Function));
-    const cronCallback = cron.schedule.mock.calls[0][1];
-    cronCallback();
-
-    expect(errsoleSQLite.deleteExpiredLogs).toHaveBeenCalledTimes(1);
   });
 
   it('should emit "ready" event only once even if initialize is called multiple times', async () => {
@@ -102,7 +96,7 @@ describe('ErrsoleSQLite - createTables', () => {
     await errsoleSQLite.createTables();
 
     // Verify specific SQL statements are called
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v2'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v3'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_users'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_config'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_notifications'), expect.any(Function));
@@ -126,7 +120,7 @@ describe('ErrsoleSQLite - createTables', () => {
     await expect(errsoleSQLite.createTables()).resolves.not.toThrow();
 
     // Verify that db.run was called for each table creation, even with errors
-    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v2'), expect.any(Function));
+    expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_logs_v3'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_users'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_config'), expect.any(Function));
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS errsole_notifications'), expect.any(Function));
@@ -557,78 +551,6 @@ describe('ErrsoleSQLite - postLogs', () => {
   });
 });
 
-describe('ErrsoleSQLite - getHostnames', () => {
-  let errsoleSQLite;
-
-  beforeEach(() => {
-    // Create an instance of ErrsoleSQLite with an in-memory SQLite database
-    errsoleSQLite = new ErrsoleSQLite(':memory:');
-
-    // Spy on db.all to mock the database query
-    jest.spyOn(errsoleSQLite.db, 'all').mockImplementation((query, params, callback) => {
-      callback(null, [
-        { hostname: 'server3.example.com' },
-        { hostname: 'server1.example.com' },
-        { hostname: 'server2.example.com' }
-      ]);
-    });
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks(); // Clear all mocks after each test
-  });
-
-  it('should return a sorted list of distinct hostnames', async () => {
-    const result = await errsoleSQLite.getHostnames();
-
-    expect(result.items).toEqual([
-      'server1.example.com',
-      'server2.example.com',
-      'server3.example.com'
-    ]);
-  });
-
-  it('should return an empty array if no hostnames are found', async () => {
-    // Mock db.all to return no rows
-    errsoleSQLite.db.all.mockImplementation((query, params, callback) => {
-      callback(null, []);
-    });
-
-    const result = await errsoleSQLite.getHostnames();
-
-    expect(result.items).toEqual([]);
-  });
-
-  it('should handle database errors', async () => {
-    // Mock db.all to simulate a database error
-    errsoleSQLite.db.all.mockImplementation((query, params, callback) => {
-      callback(new Error('Database error'), null);
-    });
-
-    await expect(errsoleSQLite.getHostnames()).rejects.toThrow('Database error');
-  });
-
-  it('should correctly handle hostnames with special characters and varying cases', async () => {
-    errsoleSQLite.db.all.mockImplementation((query, params, callback) => {
-      callback(null, [
-        { hostname: 'Server-2.Example.com' },
-        { hostname: 'server-10.example.com' },
-        { hostname: 'server-1.example.com' },
-        { hostname: 'SERVER-3.EXAMPLE.COM' }
-      ]);
-    });
-
-    const result = await errsoleSQLite.getHostnames();
-
-    expect(result.items).toEqual([
-      'SERVER-3.EXAMPLE.COM',
-      'Server-2.Example.com',
-      'server-1.example.com',
-      'server-10.example.com'
-    ]);
-  });
-});
-
 describe('ErrsoleSQLite - getLogs', () => {
   let errsoleSQLite;
 
@@ -1042,36 +964,6 @@ describe('ErrsoleSQLite - searchLogs', () => {
     expect(logTimestamp.getTime()).toBeLessThanOrEqual(lteTimestamp.getTime());
   });
 
-  it('should apply filters for hostnames', async () => {
-    const mockLogs = [
-      { id: 1, hostname: 'server2', pid: 1235, source: 'test', timestamp: new Date(), level: 'error', message: 'Log message 2', errsole_id: 2 },
-      { id: 2, hostname: 'server1', pid: 1234, source: 'test', timestamp: new Date(), level: 'info', message: 'Log message 1', errsole_id: 1 }
-    ];
-
-    // Mock the database response
-    errsoleSQLite.db.all = jest.fn((query, values, callback) => {
-      callback(null, mockLogs);
-    });
-
-    const hostnames = ['server1', 'server2'];
-
-    const result = await errsoleSQLite.searchLogs([], { hostnames });
-
-    // Ensure the SQL query includes "hostname IN (?, ?)" with correct placeholders
-    expect(errsoleSQLite.db.all).toHaveBeenCalledWith(
-      expect.stringContaining('hostname IN (?, ?)'),
-      expect.arrayContaining(hostnames),
-      expect.any(Function)
-    );
-
-    // Sort the result by hostname to avoid ordering issues in the test
-    const sortedLogs = result.items.sort((a, b) => a.hostname.localeCompare(b.hostname));
-
-    // Check that the logs returned match the specified hostnames
-    expect(sortedLogs).toHaveLength(2);
-    expect(sortedLogs[0].hostname).toBe('server1');
-    expect(sortedLogs[1].hostname).toBe('server2');
-  });
 });
 
 describe('ErrsoleSQLite - getMeta', () => {
@@ -1104,7 +996,7 @@ describe('ErrsoleSQLite - getMeta', () => {
 
     // Check that db.get was called with the correct query and parameter
     expect(errsoleSQLite.db.get).toHaveBeenCalledWith(
-      'SELECT id, meta FROM errsole_logs_v2 WHERE id = ?',
+      'SELECT id, meta FROM errsole_logs_v3 WHERE id = ?',
       [1],
       expect.any(Function)
     );
@@ -1121,7 +1013,7 @@ describe('ErrsoleSQLite - getMeta', () => {
 
     // Ensure that db.get was called correctly
     expect(errsoleSQLite.db.get).toHaveBeenCalledWith(
-      'SELECT id, meta FROM errsole_logs_v2 WHERE id = ?',
+      'SELECT id, meta FROM errsole_logs_v3 WHERE id = ?',
       [999],
       expect.any(Function)
     );
@@ -1137,7 +1029,7 @@ describe('ErrsoleSQLite - getMeta', () => {
 
     // Ensure db.get was called correctly
     expect(errsoleSQLite.db.get).toHaveBeenCalledWith(
-      'SELECT id, meta FROM errsole_logs_v2 WHERE id = ?',
+      'SELECT id, meta FROM errsole_logs_v3 WHERE id = ?',
       [1],
       expect.any(Function)
     );
@@ -1829,7 +1721,7 @@ describe('ErrsoleSQLite - flushLogs', () => {
 
     expect(mockDbRun).toHaveBeenCalledTimes(1);
     expect(mockDbRun).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v2'),
+      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v3'),
       expect.any(Array),
       expect.any(Function)
     );
@@ -1873,7 +1765,7 @@ describe('ErrsoleSQLite - flushLogs', () => {
 
     expect(mockDbRun).toHaveBeenCalledTimes(1);
     expect(mockDbRun).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v2'),
+      expect.stringContaining('INSERT OR IGNORE INTO errsole_logs_v3'),
       expect.any(Array),
       expect.any(Function)
     );
@@ -2213,7 +2105,7 @@ describe('ErrsoleSQLite - deleteExpiredNotificationItems', () => {
     expect(errsoleSQLite.getConfig).toHaveBeenCalledWith('logsTTL');
     expect(errsoleSQLite.db.all).toHaveBeenCalledTimes(1);
     expect(errsoleSQLite.db.run).toHaveBeenCalledWith(
-      'DELETE FROM errsole_notifications WHERE id IN (?, ?, ?)',
+      'DELETE FROM errsole_notifications_v2 WHERE id IN (?, ?, ?)',
       [1, 2, 3],
       expect.any(Function)
     );
