@@ -14,17 +14,14 @@ declare module 'errsole-sqlite' {
     }
   
     interface LogFilter {
-      hostname?: string;
-      pid?: number;
-      level_json?: { source: string; level: string }[];
-      sources?: string[];
-      levels?: string[];
       lt_id?: number;
       gt_id?: number;
       lte_timestamp?: Date;
       gte_timestamp?: Date;
-      limit?: number;
+      hostname?: string;
+      level_json?: { source: string; level: string }[];
       errsole_id?: number;
+      limit?: number;
     }
   
     interface Config {
@@ -73,7 +70,6 @@ declare module 'errsole-sqlite' {
       updatePassword(email: string, currentPassword: string, newPassword: string): Promise<{ item: User }>;
       deleteUser(userId: number): Promise<{}>;
       insertNotificationItem(notification: Notification): Promise<{ previousNotificationItem: Notification | null, todayNotificationCount: number }>;
-
     }
   
     export default ErrsoleSQLite;
