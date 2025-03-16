@@ -1,6 +1,12 @@
 declare module 'errsole-sqlite' {
     import { Database } from 'sqlite3';
   
+    interface Config {
+      id?: number;
+      key: string;
+      value: string;
+    }
+  
     interface Log {
       id?: number;
       hostname: string;
@@ -22,12 +28,6 @@ declare module 'errsole-sqlite' {
       level_json?: { source: string; level: string }[];
       errsole_id?: number;
       limit?: number;
-    }
-  
-    interface Config {
-      id: number;
-      key: string;
-      value: string;
     }
   
     interface User {
@@ -53,6 +53,7 @@ declare module 'errsole-sqlite' {
       getConfig(key: string): Promise<{ item: Config }>;
       setConfig(key: string, value: string): Promise<{ item: Config }>;
       deleteConfig(key: string): Promise<{}>;
+  
       getHostnames(): Promise<{ items: string[] }>;
       postLogs(logEntries: Log[]): Promise<{}>;
       getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
