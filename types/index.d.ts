@@ -63,15 +63,15 @@ declare module 'errsole-sqlite' {
       updatePassword(email: string, currentPassword: string, newPassword: string): Promise<{ item: User }>;
       deleteUser(id: number): Promise<{}>;
   
-      getHostnames(): Promise<{ items: string[] }>;
       postLogs(logEntries: Log[]): Promise<{}>;
       getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
       searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
       deleteAllLogs(): Promise<{}>;
-  
       getMeta(id: number): Promise<{ item: { id: number; meta: string } }>;
   
       insertNotificationItem(notification: Notification): Promise<{ previousNotificationItem: Notification | null, todayNotificationCount: number }>;
+
+      getHostnames(): Promise<{ items: string[] }>;
     }
   
     export default ErrsoleSQLite;
