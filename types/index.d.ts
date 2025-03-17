@@ -16,14 +16,14 @@ declare module 'errsole-sqlite' {
   
   interface Log {
     id?: number;
+    errsole_id?: number;
+    timestamp: Date;
     hostname: string;
     pid: number;
-    timestamp: Date;
     source: string;
     level: string;
     message: string;
     meta?: string;
-    errsole_id?: number;
   }
   
   interface LogFilter {
