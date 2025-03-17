@@ -63,6 +63,7 @@ declare module 'errsole-sqlite' {
     deleteUser(id: number): Promise<{}>;
     
     postLogs(logEntries: Log[]): Promise<{}>;
+    flushLogs(): Promise<{}>;
     getLogs(filters?: LogFilter): Promise<{ items: Log[] }>;
     searchLogs(searchTerms: string[], filters?: LogFilter): Promise<{ items: Log[], filters: LogFilter[] }>;
     deleteAllLogs(): Promise<{}>;
