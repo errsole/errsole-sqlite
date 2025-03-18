@@ -31,7 +31,7 @@ declare module 'errsole-sqlite' {
     gt_id?: number;
     lte_timestamp?: Date;
     gte_timestamp?: Date;
-    hostname?: string;
+    hostnames?: string[];
     level_json?: { source: string; level: string }[];
     errsole_id?: number;
     limit?: number;
